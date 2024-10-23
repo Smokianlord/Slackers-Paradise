@@ -18,7 +18,7 @@ This tool executes all shortcuts located in a user-specified folder. It begins b
 ### 5. ShortcutExecutor
 This tool automatically executes all the shortcuts stored in a specific folder location. It runs the shortcuts defined in the code without requiring any user input, making it ideal for repetitive or predefined tasks.
 
-## Windows Batch File Instructions
-- You might need to change the folder destinations in the batch file, as they can be different for each user.
-- Double-check the paths to make sure they match your system.
-- Running some of these batch files may require administrative privileges.
+## Instructions for Windows Batch Files
+- Modify the folder destinations in the batch file as they may vary for each user.
+- Verify that the paths align with your system configuration.
+- Note that running some of these batch files may require administrative privileges.
