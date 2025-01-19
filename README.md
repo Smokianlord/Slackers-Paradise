@@ -1,5 +1,5 @@
 # Slacker's Paradise
-This repository contains a set of batch file tools designed to simplify folder and file management tasks. Below is a brief description of each tool:
+This repository contains a set of tools designed to simplify folder and file management tasks. Below is a brief description of each tool:
 
 ## Tools Overview
 
