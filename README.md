@@ -1,19 +1,31 @@
-# Slacker's Paradise
-This repository contains a set of tools designed to simplify folder and file management tasks. Below is a brief description of each tool:
+# Slackers-Paradise
 
-## Tools Overview
+<p align="center">
+  <img width="850" alt="Slackers-Paradise Preview" src="https://github.com/user-attachments/assets/4b603c7c-59fa-49af-840f-e9e724d192c9" />
+</p>
 
-### 1. Build-a-Folder
-This tool allows the user to create multiple folders consecutively. It prompts the user for folder names and creates them until the user types **"done"** which exits the folder creation process.
+## About
 
-### 2. FolderFolio
-This tool lists all the folders and files in a specified folder destination provided by the user. It gives an overview of the folder contents for easy reference.
+**Slackers-Paradise** is a Windows desktop app made with Python that brings multiple BAT command tools into one clean launcher.
 
-### 3. RenameRoulette
-This tool renames all files and folders within a specified folder destination provided by the user to randomly generated numbers. Each file or folder gets a unique random number, replacing the original name, which can help with anonymizing or organizing files.
+Instead of running separate `.bat` files manually, this app gives you a simple dashboard with clickable buttons, separate feature windows, validation, and a more professional UI.
 
-### 4. ShortcutExecutor I-O
-This tool executes all shortcuts located in a user-specified folder. It begins by prompting the user to provide the folder location.
+## Features
 
-### 5. ShortcutExecutor
-This tool automatically executes all the shortcuts stored in a specific folder location. It runs the shortcuts defined in the code without requiring any user input, making it ideal for repetitive or predefined tasks.
+### Build-a-Folder
+Create one or multiple folders easily with validation.
+
+### FolderFolio
+Generate a clean list of files and folders from a selected directory.
+
+### RenameRoulette
+Randomly rename files with preview and confirmation before applying changes.
+
+### ShortcutExecutor
+Run `.lnk` shortcut files from a selected folder.
+
+### Gaming Shortcut Folder
+Quickly run shortcuts from:
+
+```text
+D:\Gaming Shortcuts
