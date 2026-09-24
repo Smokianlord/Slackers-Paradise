@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller build artifacts
+build/
+*.manifest
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Editor and OS artifacts
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.tmp
