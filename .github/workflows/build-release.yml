@@ -1,0 +1,53 @@
+name: Build & Release Slackers-Paradise
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows Executable
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build Executable with PyInstaller
+        run: |
+          python -m PyInstaller Slackers-Paradise.spec --noconfirm
+
+      - name: Create Release Bundle
+        run: |
+          mkdir release-bundle
+          copy dist\Slackers-Paradise.exe release-bundle\
+          copy README.md release-bundle\
+          copy CHANGELOG.md release-bundle\
+          Compress-Archive -Path release-bundle\* -DestinationPath Slackers-Paradise-Windows-x64.zip
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            Slackers-Paradise-Windows-x64.zip
+            dist/Slackers-Paradise.exe
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
