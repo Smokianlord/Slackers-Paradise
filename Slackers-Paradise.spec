@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-datas = [('assets\\app.ico', 'assets'), ('assets\\app.png', 'assets')]
+datas = [('assets\\app.ico', 'assets'), ('assets\\app.png', 'assets'), ('assets\\preview.png', 'assets')]
 datas += collect_data_files('customtkinter')
 
 hiddenimports = collect_submodules('customtkinter') + [

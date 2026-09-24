@@ -1,7 +1,7 @@
 # Slackers-Paradise Pro
 
 <p align="center">
-  <img width="850" alt="Slackers-Paradise Preview" src="https://github.com/user-attachments/assets/4b603c7c-59fa-49af-840f-e9e724d192c9" />
+  <img width="850" alt="Slackers-Paradise Pro Preview" src="assets/preview.png" />
 </p>
 
 <p align="center">
@@ -82,9 +82,9 @@ python app.py
 
 ### Method 3: Build Standalone Executable with PyInstaller
 ```powershell
-python -m PyInstaller Slackers-Paradise.spec --noconfirm
+python -m PyInstaller Slackers-Paradise.spec --distpath . --noconfirm
 ```
-The compiled executable will be located in `dist/Slackers-Paradise.exe`.
+The compiled executable will be located directly in `./Slackers-Paradise.exe`.
 
 ---
 

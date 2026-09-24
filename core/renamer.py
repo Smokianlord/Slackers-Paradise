@@ -29,6 +29,10 @@ class RenameEngine:
         replace_text: str = "",
         add_prefix: str = "",
         add_suffix: str = "",
+        # Date stamp params:
+        date_source: str = "today",
+        date_format: str = "YYYY-MM-DD",
+        date_placement: str = "prefix",
         # Case transform:
         case_mode: str = "lower",  # lower, upper, title, snake, kebab
         # Filter params:
@@ -75,11 +79,25 @@ class RenameEngine:
                 new_stem = f"{add_prefix}{new_stem}{add_suffix}"
                 new_name = f"{new_stem}{ext}"
             elif mode == "date_stamp":
-                try:
-                    mtime = datetime.fromtimestamp(src.stat().st_mtime).strftime("%Y-%m-%d")
-                except Exception:
-                    mtime = datetime.now().strftime("%Y-%m-%d")
-                new_name = f"{mtime}_{stem}{ext}"
+                fmt_map = {
+                    "YYYY-MM-DD": "%Y-%m-%d",
+                    "YYYYMMDD": "%Y%m%d",
+                    "YYYY-MM-DD_HHMM": "%Y-%m-%d_%H%M",
+                    "DD-MM-YYYY": "%d-%m-%Y"
+                }
+                actual_fmt = fmt_map.get(date_format, date_format if "%" in date_format else "%Y-%m-%d")
+                if date_source == "today":
+                    stamp = datetime.now().strftime(actual_fmt)
+                else:
+                    try:
+                        stamp = datetime.fromtimestamp(src.stat().st_mtime).strftime(actual_fmt)
+                    except Exception:
+                        stamp = datetime.now().strftime(actual_fmt)
+
+                if date_placement == "suffix":
+                    new_name = f"{stem}_{stamp}{ext}"
+                else:
+                    new_name = f"{stamp}_{stem}{ext}"
             elif mode == "case":
                 if case_mode == "lower":
                     new_name = f"{stem.lower()}{ext.lower()}"

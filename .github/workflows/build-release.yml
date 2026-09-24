@@ -31,15 +31,15 @@ jobs:
 
       - name: Build Executable with PyInstaller
         run: |
-          python -m PyInstaller Slackers-Paradise.spec --noconfirm
+          python -m PyInstaller Slackers-Paradise.spec --distpath . --noconfirm
 
       - name: Create Release Bundle
         run: |
           mkdir release-bundle
-          copy dist\Slackers-Paradise.exe release-bundle\
+          copy Slackers-Paradise.exe release-bundle\
           copy README.md release-bundle\
           copy CHANGELOG.md release-bundle\
-          Compress-Archive -Path release-bundle\* -DestinationPath Slackers-Paradise-Windows-x64.zip
+          Compress-Archive -Path release-bundle\* -DestinationPath Slackers-Paradise-Windows-x64.zip -Force
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
@@ -47,7 +47,7 @@ jobs:
         with:
           files: |
             Slackers-Paradise-Windows-x64.zip
-            dist/Slackers-Paradise.exe
+            Slackers-Paradise.exe
           body_path: RELEASE_NOTES.md
           draft: false
           prerelease: false

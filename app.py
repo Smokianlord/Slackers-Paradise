@@ -577,7 +577,30 @@ class RenameRouletteView(ctk.CTkFrame):
         elif "Date" in mode:
             f = ctk.CTkFrame(self.opts_container, fg_color="transparent")
             f.pack(fill="x", padx=10, pady=8)
-            ctk.CTkLabel(f, text="Adds 'YYYY-MM-DD_' date prefix using file modification date.").pack(side="left")
+
+            ctk.CTkLabel(f, text="Date Source:").pack(side="left", padx=(0, 4))
+            self.date_src_menu = ctk.CTkOptionMenu(
+                f, values=["Today's Date", "File Modified Date"], width=150,
+                command=lambda _v: self.generate_preview()
+            )
+            self.date_src_menu.pack(side="left", padx=(0, 10))
+            self.date_src_menu.set("Today's Date")
+
+            ctk.CTkLabel(f, text="Format:").pack(side="left", padx=(0, 4))
+            self.date_fmt_menu = ctk.CTkOptionMenu(
+                f, values=["YYYY-MM-DD", "YYYYMMDD", "YYYY-MM-DD_HHMM", "DD-MM-YYYY"], width=140,
+                command=lambda _v: self.generate_preview()
+            )
+            self.date_fmt_menu.pack(side="left", padx=(0, 10))
+            self.date_fmt_menu.set("YYYY-MM-DD")
+
+            ctk.CTkLabel(f, text="Position:").pack(side="left", padx=(0, 4))
+            self.date_pos_menu = ctk.CTkOptionMenu(
+                f, values=["Prefix (2026-09-25_name)", "Suffix (name_2026-09-25)"], width=190,
+                command=lambda _v: self.generate_preview()
+            )
+            self.date_pos_menu.pack(side="left")
+            self.date_pos_menu.set("Prefix (2026-09-25_name)")
 
         elif "Case" in mode:
             f = ctk.CTkFrame(self.opts_container, fg_color="transparent")
@@ -620,6 +643,9 @@ class RenameRouletteView(ctk.CTkFrame):
             kwargs["add_suffix"] = self.rep_sfx.get()
         elif "Date" in mode_str:
             mode = "date_stamp"
+            kwargs["date_source"] = "today" if (hasattr(self, "date_src_menu") and "Today" in self.date_src_menu.get()) else "modified"
+            kwargs["date_format"] = self.date_fmt_menu.get() if hasattr(self, "date_fmt_menu") else "YYYY-MM-DD"
+            kwargs["date_placement"] = "prefix" if (hasattr(self, "date_pos_menu") and "Prefix" in self.date_pos_menu.get()) else "suffix"
         elif "Case" in mode_str:
             mode = "case"
             kwargs["case_mode"] = self.case_menu.get()
@@ -708,15 +734,46 @@ class ShortcutExecutorView(ctk.CTkFrame):
         ctrl = ctk.CTkFrame(self, fg_color=("gray90", "#1e293b"), corner_radius=8)
         ctrl.pack(fill="x", padx=16, pady=(0, 10))
 
+        # Dedicated Gaming Shortcut Folder bar
+        gaming_box = ctk.CTkFrame(ctrl, fg_color=("gray85", "#0f172a"), corner_radius=6)
+        gaming_box.pack(fill="x", padx=14, pady=(10, 6))
+
+        g_left = ctk.CTkFrame(gaming_box, fg_color="transparent")
+        g_left.pack(side="left", fill="x", expand=True, padx=10, pady=8)
+
+        ctk.CTkLabel(g_left, text="🎮 Gaming Folder:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 6))
+
+        self.gaming_path_lbl = ctk.CTkLabel(
+            g_left, text=self._format_gaming_path(),
+            font=ctk.CTkFont(family="Consolas", size=11), text_color=("#2563eb", "#60a5fa")
+        )
+        self.gaming_path_lbl.pack(side="left", padx=(0, 10))
+
+        self.gaming_status_badge = ctk.CTkLabel(
+            g_left, text=self._get_gaming_status_text(),
+            font=ctk.CTkFont(size=10, weight="bold"),
+            fg_color="#0f766e" if os.path.exists(config.get("default_gaming_folder", "")) else "#b45309",
+            text_color="white", corner_radius=4, padx=6, pady=2
+        )
+        self.gaming_status_badge.pack(side="left")
+
+        g_right = ctk.CTkFrame(gaming_box, fg_color="transparent")
+        g_right.pack(side="right", padx=10, pady=8)
+
+        ctk.CTkButton(g_right, text="📂 Go to Gaming Folder", height=28, fg_color="#7c3aed", hover_color="#6d28d9",
+                      font=ctk.CTkFont(weight="bold"), command=self._open_gaming_folder).pack(side="left", padx=3)
+        ctk.CTkButton(g_right, text="⚙ Configure", height=28, width=85, fg_color="#334155", hover_color="#475569",
+                      command=self.configure_gaming_folder).pack(side="left", padx=3)
+
+        # Quick Jumps & Search bar
         r0 = ctk.CTkFrame(ctrl, fg_color="transparent")
-        r0.pack(fill="x", padx=14, pady=10)
+        r0.pack(fill="x", padx=14, pady=(4, 10))
 
         ctk.CTkLabel(r0, text="Quick Jumps:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
-        gaming_folder = config.get("default_gaming_folder")
-        ctk.CTkButton(r0, text="🎮 Gaming Shortcuts", height=28, fg_color="#7c3aed", hover_color="#6d28d9",
-                      command=lambda: self._set_folder(gaming_folder)).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(r0, text="🖥 Desktop", height=28, fg_color="#0284c7", hover_color="#0369a1",
-                      command=lambda: self._set_folder(str(Path.home() / "Desktop"))).pack(side="left", padx=(0, 12))
+        ctk.CTkButton(r0, text="🖥 Desktop", height=28, width=95, fg_color="#0284c7", hover_color="#0369a1",
+                      command=lambda: self._set_folder(str(Path.home() / "Desktop"))).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(r0, text="📥 Downloads", height=28, width=105, fg_color="#0284c7", hover_color="#0369a1",
+                      command=lambda: self._set_folder(str(Path.home() / "Downloads"))).pack(side="left", padx=(0, 14))
 
         ctk.CTkLabel(r0, text="Search:").pack(side="left", padx=(8, 4))
         self.search_entry = ctk.CTkEntry(r0, placeholder_text="Filter shortcuts...", width=160, height=28)
@@ -785,14 +842,80 @@ class ShortcutExecutorView(ctk.CTkFrame):
                                        fg_color="#7c3aed", hover_color="#6d28d9", command=self.launch_selected)
         self.launch_btn.pack(side="right")
 
+    def _format_gaming_path(self):
+        p = config.get("default_gaming_folder", "")
+        if not p:
+            return "Not Configured"
+        if len(p) > 36:
+            return p[:18] + "..." + p[-15:]
+        return p
+
+    def _get_gaming_status_text(self):
+        p = config.get("default_gaming_folder", "")
+        if p and os.path.exists(p):
+            count = len(list(Path(p).glob("*.lnk")))
+            return f"Found ({count} .lnk)"
+        return "Folder Not Found"
+
+    def _update_gaming_bar(self):
+        if hasattr(self, "gaming_path_lbl"):
+            self.gaming_path_lbl.configure(text=self._format_gaming_path())
+        if hasattr(self, "gaming_status_badge"):
+            p = config.get("default_gaming_folder", "")
+            exists = bool(p and os.path.exists(p))
+            self.gaming_status_badge.configure(
+                text=self._get_gaming_status_text(),
+                fg_color="#0f766e" if exists else "#b45309"
+            )
+
+    def configure_gaming_folder(self):
+        current = config.get("default_gaming_folder", "")
+        initial = current if (current and os.path.exists(current)) else startup_folder()
+        chosen = filedialog.askdirectory(parent=self, initialdir=initial, title="Select Gaming Shortcuts Folder")
+        if chosen:
+            config.set("default_gaming_folder", chosen)
+            self._update_gaming_bar()
+            self._set_folder(chosen)
+            self.app.log(f"Gaming shortcuts folder set to: {chosen}", "success")
+
+    def _open_gaming_folder(self):
+        g_folder = config.get("default_gaming_folder", "")
+        if g_folder and os.path.exists(g_folder):
+            self._set_folder(g_folder)
+        else:
+            ans = messagebox.askyesno(
+                "Gaming Folder Not Found",
+                f"The configured gaming folder does not exist:\n\n{g_folder or 'Not configured'}\n\nWould you like to browse and choose an existing folder?\n(Click 'No' if you want to create '{g_folder}' instead)."
+            )
+            if ans:
+                self.configure_gaming_folder()
+            elif g_folder:
+                try:
+                    Path(g_folder).mkdir(parents=True, exist_ok=True)
+                    self._update_gaming_bar()
+                    self._set_folder(g_folder)
+                    messagebox.showinfo("Folder Created", f"Successfully created:\n\n{g_folder}")
+                except Exception as exc:
+                    messagebox.showerror("Error", f"Could not create folder:\n\n{exc}")
+                    self.configure_gaming_folder()
+            else:
+                self.configure_gaming_folder()
+
     def _set_folder(self, folder):
         if os.path.exists(folder):
             self.app.set_active_folder(folder)
             self.scan()
         else:
-            messagebox.showinfo("Folder Info", f"Folder does not exist yet:\n\n{folder}\n\nYou can create or browse another folder.")
+            ans = messagebox.askyesno(
+                "Folder Not Found",
+                f"This folder does not exist:\n\n{folder}\n\nWould you like to browse and pick a folder instead?"
+            )
+            if ans:
+                self.app.browse_folder()
+                self.scan()
 
     def scan(self):
+        self._update_gaming_bar()
         folder = Path(self.app.get_active_folder())
         self.shortcuts = scan_shortcuts(folder)
         self._filter_shortcuts()
