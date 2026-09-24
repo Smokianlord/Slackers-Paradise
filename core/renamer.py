@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional, Any
+from core.folio import is_hidden_or_system
 
 
 class RenameEngine:
@@ -51,7 +52,7 @@ class RenameEngine:
             ]
 
         if not include_hidden:
-            files = [f for f in files if not f.name.startswith(".")]
+            files = [f for f in files if not is_hidden_or_system(f)]
 
         plan = []
         used_new_names = set()

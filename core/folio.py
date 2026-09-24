@@ -2,11 +2,28 @@ import os
 import json
 import csv
 import fnmatch
+import ctypes
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 DEFAULT_EXCLUDES = {".git", ".svn", "__pycache__", "node_modules", ".venv", "venv", ".idea", ".vscode"}
+
+
+def is_hidden_or_system(path: Path) -> bool:
+    name = path.name
+    if name.startswith("."):
+        return True
+    if name.lower() in {"desktop.ini", "thumbs.db", "ntuser.dat", "ntuser.ini"}:
+        return True
+    if os.name == "nt":
+        try:
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+            if attrs != -1 and (attrs & (0x2 | 0x4)):  # FILE_ATTRIBUTE_HIDDEN (0x2) or FILE_ATTRIBUTE_SYSTEM (0x4)
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def format_size(bytes_val: int) -> str:
@@ -41,84 +58,141 @@ def scan_directory(
     patterns = [p.strip().lower() for p in patterns if p.strip()] if patterns else ["*"]
 
     def matches_pattern(name: str) -> bool:
+        if not patterns or "*" in patterns or "*.*" in patterns:
+            return True
         low = name.lower()
         return any(fnmatch.fnmatch(low, pat) for pat in patterns)
 
-    if recursive:
-        walker = os.walk(root_path)
-    else:
+    def should_skip(p: Path) -> bool:
+        if not include_hidden and is_hidden_or_system(p):
+            return True
+        if exclude_system and p.name in DEFAULT_EXCLUDES:
+            return True
+        return False
+
+    if not recursive:
+        # Non-recursive: direct scan of root_path entries
         try:
-            entries = list(root_path.iterdir())
-            dirs = [e.name for e in entries if e.is_dir()]
-            files = [e.name for e in entries if e.is_file()]
-            walker = [(str(root_path), dirs, files)]
+            entries = sorted(list(root_path.iterdir()), key=lambda e: (not e.is_dir(), e.name.lower()))
         except Exception as exc:
             raise RuntimeError(f"Cannot read directory: {exc}")
 
-    for dirpath, dirnames, filenames in walker:
-        current_dir = Path(dirpath)
-        rel_base = current_dir.relative_to(root_path)
+        for entry in entries:
+            if should_skip(entry):
+                continue
 
-        # Filter excluded directories in-place for recursion
-        if exclude_system:
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in DEFAULT_EXCLUDES and (include_hidden or not d.startswith("."))
-            ]
-        elif not include_hidden:
-            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            rel_path = entry.relative_to(root_path)
 
-        # Record directories
-        if include_dirs and str(rel_base) != ".":
-            try:
-                stat = current_dir.stat()
-                mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-            except Exception:
-                mtime = "-"
-            items.append({
-                "name": current_dir.name,
-                "relative_path": str(rel_base).replace("\\", "/"),
-                "is_dir": True,
-                "type": "Folder",
-                "size_bytes": 0,
-                "size_formatted": "-",
-                "extension": "",
-                "modified": mtime
-            })
-            dir_count += 1
+            if entry.is_dir():
+                if include_dirs:
+                    try:
+                        stat = entry.stat()
+                        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        mtime = "-"
+                    items.append({
+                        "name": entry.name,
+                        "relative_path": str(rel_path).replace("\\", "/"),
+                        "is_dir": True,
+                        "type": "Folder",
+                        "size_bytes": 0,
+                        "size_formatted": "-",
+                        "extension": "",
+                        "modified": mtime
+                    })
+                    dir_count += 1
+            elif entry.is_file():
+                if include_files and matches_pattern(entry.name):
+                    try:
+                        stat = entry.stat()
+                        size = stat.st_size
+                        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        size = 0
+                        mtime = "-"
+                    ext = entry.suffix.lower()
+                    extension_counts[ext] = extension_counts.get(ext, 0) + 1
+                    total_size += size
+                    file_count += 1
+                    items.append({
+                        "name": entry.name,
+                        "relative_path": str(rel_path).replace("\\", "/"),
+                        "is_dir": False,
+                        "type": ext.upper() if ext else "File",
+                        "size_bytes": size,
+                        "size_formatted": format_size(size),
+                        "extension": ext,
+                        "modified": mtime
+                    })
+    else:
+        # Recursive: walk root_path
+        for dirpath, dirnames, filenames in os.walk(root_path):
+            current_dir = Path(dirpath)
 
-        if include_files:
-            for fname in sorted(filenames, key=str.lower):
-                if not include_hidden and fname.startswith("."):
-                    continue
-                if not matches_pattern(fname):
-                    continue
+            # Filter dirnames in-place so os.walk does not recurse into skipped directories
+            filtered_dirnames = []
+            for d in dirnames:
+                p = current_dir / d
+                if not should_skip(p):
+                    filtered_dirnames.append(d)
+            dirnames[:] = filtered_dirnames
 
-                fpath = current_dir / fname
-                rel_fpath = fpath.relative_to(root_path)
+            # Record directories in current_dir
+            if include_dirs and current_dir != root_path:
+                rel_base = current_dir.relative_to(root_path)
                 try:
-                    stat = fpath.stat()
-                    size = stat.st_size
+                    stat = current_dir.stat()
                     mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
-                    size = 0
                     mtime = "-"
-
-                ext = fpath.suffix.lower()
-                extension_counts[ext] = extension_counts.get(ext, 0) + 1
-                total_size += size
-                file_count += 1
-
                 items.append({
-                    "name": fname,
-                    "relative_path": str(rel_fpath).replace("\\", "/"),
-                    "is_dir": False,
-                    "type": ext.upper() if ext else "File",
-                    "size_bytes": size,
-                    "size_formatted": format_size(size),
-                    "extension": ext,
+                    "name": current_dir.name,
+                    "relative_path": str(rel_base).replace("\\", "/"),
+                    "is_dir": True,
+                    "type": "Folder",
+                    "size_bytes": 0,
+                    "size_formatted": "-",
+                    "extension": "",
                     "modified": mtime
                 })
+                dir_count += 1
+
+            # Record files in current_dir
+            if include_files:
+                for fname in sorted(filenames, key=str.lower):
+                    fpath = current_dir / fname
+                    if should_skip(fpath):
+                        continue
+                    if not matches_pattern(fname):
+                        continue
+
+                    rel_fpath = fpath.relative_to(root_path)
+                    try:
+                        stat = fpath.stat()
+                        size = stat.st_size
+                        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        size = 0
+                        mtime = "-"
+
+                    ext = fpath.suffix.lower()
+                    extension_counts[ext] = extension_counts.get(ext, 0) + 1
+                    total_size += size
+                    file_count += 1
+
+                    items.append({
+                        "name": fname,
+                        "relative_path": str(rel_fpath).replace("\\", "/"),
+                        "is_dir": False,
+                        "type": ext.upper() if ext else "File",
+                        "size_bytes": size,
+                        "size_formatted": format_size(size),
+                        "extension": ext,
+                        "modified": mtime
+                    })
+
+    # Sort items: folders first, then files alphabetically by relative path
+    items.sort(key=lambda it: (not it["is_dir"], it["relative_path"].lower()))
 
     return {
         "root": str(root_path),
@@ -131,7 +205,7 @@ def scan_directory(
     }
 
 
-def generate_ascii_tree(root_path: Path, max_depth: int = 4, exclude_system: bool = True) -> str:
+def generate_ascii_tree(root_path: Path, max_depth: int = 4, exclude_system: bool = True, include_hidden: bool = False) -> str:
     lines = [f"{root_path.name}/"]
 
     def walk_tree(dir_path: Path, prefix: str = "", depth: int = 0):
@@ -144,9 +218,9 @@ def generate_ascii_tree(root_path: Path, max_depth: int = 4, exclude_system: boo
 
         filtered = []
         for e in entries:
-            if exclude_system and e.name in DEFAULT_EXCLUDES:
+            if not include_hidden and is_hidden_or_system(e):
                 continue
-            if e.name.startswith("."):
+            if exclude_system and e.name in DEFAULT_EXCLUDES:
                 continue
             filtered.append(e)
 
