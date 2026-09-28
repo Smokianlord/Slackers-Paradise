@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Tuple
 
 INVALID_NAME_CHARS = set('<>:"|?*')
 RESERVED_NAMES = {

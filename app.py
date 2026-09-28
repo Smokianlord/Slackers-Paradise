@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import shutil
-import threading
 import subprocess
 from pathlib import Path
 from datetime import datetime
@@ -26,7 +25,7 @@ import customtkinter as ctk
 
 from core.config import config, APP_NAME, APP_VERSION
 from core.builder import execute_create_folders, preview_creation
-from core.folio import scan_directory, export_scan_data, generate_ascii_tree, format_size
+from core.folio import scan_directory, export_scan_data, format_size
 from core.renamer import renamer_engine
 from core.shortcuts import scan_shortcuts, shortcut_runner
 from core.cleaner import scan_user_temp, scan_empty_folders, scan_broken_shortcuts, execute_clean

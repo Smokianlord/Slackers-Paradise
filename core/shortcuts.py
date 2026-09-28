@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import threading
 from pathlib import Path
@@ -12,8 +11,8 @@ def resolve_lnk_target(lnk_path: Path) -> Dict[str, Any]:
     valid = True
 
     try:
-        import win32com.client
-        shell = win32com.client.Dispatch("WScript.Shell")
+        import win32com.client as win32_client
+        shell = win32_client.Dispatch("WScript.Shell")
         shortcut = shell.CreateShortcut(str(lnk_path))
         target = shortcut.TargetPath
         arguments = shortcut.Arguments
