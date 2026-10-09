@@ -1,19 +1,14 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = [('assets\\app.ico', 'assets'), ('assets\\app.png', 'assets')]
 datas += collect_data_files('customtkinter')
 
-hiddenimports = collect_submodules('customtkinter') + [
-    'core',
-    'core.config',
-    'core.builder',
-    'core.folio',
-    'core.renamer',
-    'core.shortcuts',
-    'core.cleaner',
+hiddenimports = collect_submodules('customtkinter') + collect_submodules('core') + collect_submodules('ui') + [
     'PIL',
-    'PIL._tkinter_finder'
+    'PIL._tkinter_finder',
+    'win32com.client',
+    'pythoncom',
 ]
 
 a = Analysis(
@@ -52,3 +47,4 @@ exe = EXE(
     entitlements_file=None,
     icon=['assets\\app.ico'],
 )
+

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.0] - 2026-10-08 (Redesign)
+
+### Changed
+- Complete UI redesign: sidebar navigation, violet dark/light themes, raised 3D-style buttons, toasts, vector icons, sortable tables. Code split into `ui/` and `core/` packages.
+- **Build-a-Folder**: commas are no longer separators - one folder per line. Live validation now shows reasons and **suggested fixes**; fix per line, all at once, or at creation. Folder creation can be undone.
+- Settings reorganised; `default_gaming_folder` migrated to `shortcut_folder` (no hard-coded `D:\` path).
+
+### Added
+- Templates you can save/remove, `.txt` import, regex and match-case replace, file-type filter for all rename modes, Recycle Bin cleanup, temp-age threshold, window/folder memory, unit tests.
+
+### Fixed
+- Rename undo failing on chained or swapped names; rename names with illegal characters; extension filter ignored outside Roulette.
+- Cleaner missed nested empty folders and could run on very large paths on the UI thread.
+- ASCII tree export ignored filters; UI-thread COM/threading hazards in shortcut launching.
+
+---
 ## [3.0.0] - 2026-09-25 (Complete Modern Overhaul)
 
 ### 🌟 Major Highlights & Modern UI Overhaul

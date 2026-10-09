@@ -1,4 +1,5 @@
-import os
+﻿import os
+import io
 import json
 import csv
 import fnmatch
@@ -205,96 +206,92 @@ def scan_directory(
     }
 
 
-def generate_ascii_tree(root_path: Path, max_depth: int = 4, exclude_system: bool = True, include_hidden: bool = False) -> str:
-    lines = [f"{root_path.name}/"]
+def generate_ascii_tree(scan_result: Dict[str, Any], show_sizes: bool = True) -> str:
+    """Render the scanned items (respecting every scan filter) as an ASCII tree."""
+    root_name = Path(scan_result["root"]).name or scan_result["root"]
+    tree: Dict[str, Any] = {}
+    for item in scan_result["items"]:
+        node = tree
+        parts = item["relative_path"].split("/")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {"__dir__": True, "__kids__": {}})["__kids__"]
+        leaf = node.setdefault(parts[-1], {"__kids__": {}})
+        leaf["__dir__"] = item["is_dir"]
+        leaf["__size__"] = item["size_formatted"]
 
-    def walk_tree(dir_path: Path, prefix: str = "", depth: int = 0):
-        if depth >= max_depth:
-            return
-        try:
-            entries = sorted(list(dir_path.iterdir()), key=lambda p: (not p.is_dir(), p.name.lower()))
-        except Exception:
-            return
+    lines = [f"{root_name}/"]
 
-        filtered = []
-        for e in entries:
-            if not include_hidden and is_hidden_or_system(e):
-                continue
-            if exclude_system and e.name in DEFAULT_EXCLUDES:
-                continue
-            filtered.append(e)
+    def walk(kids: Dict[str, Any], prefix: str):
+        ordered = sorted(kids.items(), key=lambda kv: (not kv[1].get("__dir__", False), kv[0].lower()))
+        for i, (name, node) in enumerate(ordered):
+            last = i == len(ordered) - 1
+            if node.get("__dir__"):
+                label = f"{name}/"
+            else:
+                label = f"{name} ({node['__size__']})" if show_sizes else name
+            lines.append(f"{prefix}{'└── ' if last else '├── '}{label}")
+            if node["__kids__"]:
+                walk(node["__kids__"], prefix + ("    " if last else "│   "))
 
-        total = len(filtered)
-        for i, entry in enumerate(filtered):
-            is_last = (i == total - 1)
-            connector = "└── " if is_last else "├── "
-            extension_str = f" ({format_size(entry.stat().st_size)})" if entry.is_file() else "/"
-            lines.append(f"{prefix}{connector}{entry.name}{extension_str}")
-            if entry.is_dir():
-                sub_prefix = prefix + ("    " if is_last else "│   ")
-                walk_tree(entry, sub_prefix, depth + 1)
-
-    walk_tree(root_path)
+    walk(tree, "")
     return "\n".join(lines)
 
 
-def export_scan_data(scan_result: Dict[str, Any], output_path: Path, format_type: str) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+def _csv_text(items: List[Dict[str, Any]]) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["Name", "Relative Path", "Type", "Extension", "Size Bytes", "Size Formatted", "Modified"])
+    for item in items:
+        writer.writerow([item["name"], item["relative_path"], item["type"], item["extension"],
+                         item["size_bytes"], item["size_formatted"], item["modified"]])
+    return buf.getvalue()
+
+
+def render_scan_data(scan_result: Dict[str, Any], format_type: str) -> str:
+    """Render a scan in one of: txt, tree, csv, json, markdown."""
     fmt = format_type.lower()
     items = scan_result["items"]
 
     if fmt == "txt":
-        lines = [item["relative_path"] for item in items]
-        output_path.write_text("\n".join(lines), encoding="utf-8")
-
-    elif fmt == "tree":
-        root = Path(scan_result["root"])
-        tree_text = generate_ascii_tree(root)
-        output_path.write_text(tree_text, encoding="utf-8")
-
-    elif fmt == "csv":
-        with open(output_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Name", "Relative Path", "Type", "Extension", "Size Bytes", "Size Formatted", "Modified"])
-            for item in items:
-                writer.writerow([
-                    item["name"],
-                    item["relative_path"],
-                    item["type"],
-                    item["extension"],
-                    item["size_bytes"],
-                    item["size_formatted"],
-                    item["modified"]
-                ])
-
-    elif fmt == "json":
-        data = {
+        return "\n".join(item["relative_path"] for item in items)
+    if fmt == "tree":
+        return generate_ascii_tree(scan_result)
+    if fmt == "csv":
+        return _csv_text(items)
+    if fmt == "json":
+        return json.dumps({
             "root": scan_result["root"],
+            "generated": datetime.now().isoformat(timespec="seconds"),
             "summary": {
                 "files": scan_result["total_files"],
                 "folders": scan_result["total_dirs"],
-                "total_size": scan_result["total_size_formatted"]
+                "total_size": scan_result["total_size_formatted"],
             },
-            "items": items
-        }
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-
-    elif fmt == "markdown":
+            "items": items,
+        }, indent=2, ensure_ascii=False)
+    if fmt == "markdown":
         lines = [
             f"# Directory Catalog: {Path(scan_result['root']).name}",
             "",
             f"**Path**: `{scan_result['root']}`  ",
-            f"**Total Files**: {scan_result['total_files']} | **Folders**: {scan_result['total_dirs']} | **Total Size**: {scan_result['total_size_formatted']}  ",
+            f"**Files**: {scan_result['total_files']} | **Folders**: {scan_result['total_dirs']} | **Total Size**: {scan_result['total_size_formatted']}  ",
             f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "",
             "| Item | Type | Size | Modified | Path |",
-            "|---|---|---|---|---|"
+            "|---|---|---|---|---|",
         ]
         for item in items:
             name = item["name"].replace("|", "\\|")
             rpath = item["relative_path"].replace("|", "\\|")
             lines.append(f"| {name} | {item['type']} | {item['size_formatted']} | {item['modified']} | `{rpath}` |")
-        output_path.write_text("\n".join(lines), encoding="utf-8")
-    else:
-        raise ValueError(f"Unsupported format: {format_type}")
+        return "\n".join(lines)
+    raise ValueError(f"Unsupported format: {format_type}")
+
+
+def export_scan_data(scan_result: Dict[str, Any], output_path: Path, format_type: str) -> None:
+    text = render_scan_data(scan_result, format_type)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    # utf-8-sig so Excel opens CSV with correct accents/CJK; harmless elsewhere
+    encoding = "utf-8-sig" if format_type.lower() == "csv" else "utf-8"
+    with open(output_path, "w", encoding=encoding, newline="") as f:
+        f.write(text)

@@ -1,154 +1,233 @@
+"""Folder generator engine: one folder per line, validated with fix suggestions.
+
+Commas are *not* separators - they are valid in Windows folder names, so every
+non-empty line is exactly one folder (or one nested path when `nested` is on).
+"""
+import os
 import re
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
-INVALID_NAME_CHARS = set('<>:"|?*')
-RESERVED_NAMES = {
-    "CON", "PRN", "AUX", "NUL",
-    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
-}
+from core.naming import analyze_name
+
+MAX_EXPANSION = 5000
+
+# Item statuses
+NEW = "new"
+EXISTING = "existing"
+FIXABLE = "fixable"      # has problems, but a clean replacement name is available
+INVALID = "invalid"      # has problems and no usable replacement
+DUPLICATE = "duplicate"  # same folder already listed on an earlier line
 
 
-def expand_sequence(text: str) -> List[str]:
+class SequenceTooLarge(ValueError):
+    pass
+
+
+def expand_sequence(text: str, _budget: List[int] = None) -> List[str]:
     """
     Expands expressions like:
       - Episode_{01..12} -> Episode_01 .. Episode_12
-      - Section_{1..5} -> Section_1 .. Section_5
-      - Part_{A..D} -> Part_A .. Part_D
+      - Section_{1..5}   -> Section_1 .. Section_5
+      - Part_{A..D}      -> Part_A .. Part_D
     """
-    pattern = r"\{([0-9]+)\.\.([0-9]+)\}"
-    match = re.search(pattern, text)
+    if _budget is None:
+        _budget = [MAX_EXPANSION]
+
+    match = re.search(r"\{(\d+)\.\.(\d+)\}", text)
     if match:
         start_str, end_str = match.group(1), match.group(2)
         start, end = int(start_str), int(end_str)
-        width = max(len(start_str), len(end_str)) if start_str.startswith("0") else 0
+        if abs(end - start) + 1 > MAX_EXPANSION:
+            raise SequenceTooLarge(f"Range {{{start_str}..{end_str}}} is larger than {MAX_EXPANSION} items")
+        width = max(len(start_str), len(end_str)) if (start_str.startswith("0") or end_str.startswith("0")) else 0
         step = 1 if start <= end else -1
-        results = []
+        results: List[str] = []
         for i in range(start, end + step, step):
-            formatted_num = f"{i:0{width}d}" if width > 0 else str(i)
-            expanded = text[:match.start()] + formatted_num + text[match.end():]
-            results.extend(expand_sequence(expanded))
+            number = f"{i:0{width}d}" if width else str(i)
+            results.extend(expand_sequence(text[:match.start()] + number + text[match.end():], _budget))
         return results
 
-    char_pattern = r"\{([A-Za-z])\.\.([A-Za-z])\}"
-    match = re.search(char_pattern, text)
+    match = re.search(r"\{([A-Za-z])\.\.([A-Za-z])\}", text)
     if match:
-        c1, c2 = match.group(1), match.group(2)
-        o1, o2 = ord(c1), ord(c2)
+        o1, o2 = ord(match.group(1)), ord(match.group(2))
         step = 1 if o1 <= o2 else -1
         results = []
         for code in range(o1, o2 + step, step):
-            expanded = text[:match.start()] + chr(code) + text[match.end():]
-            results.extend(expand_sequence(expanded))
+            results.extend(expand_sequence(text[:match.start()] + chr(code) + text[match.end():], _budget))
         return results
 
+    _budget[0] -= 1
+    if _budget[0] < 0:
+        raise SequenceTooLarge(f"Sequences expand to more than {MAX_EXPANSION} folders")
     return [text]
 
 
-def parse_folder_names(raw_input: str) -> List[str]:
+def _strip_wrapping_quotes(text: str) -> str:
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        return text[1:-1].strip()
+    return text
+
+
+def parse_lines(raw_input: str, nested: bool = True) -> List[Tuple[int, str]]:
     """
-    Parses multi-line or comma-separated raw input into cleaned folder paths,
-    expanding any range sequences.
+    Turn raw text into (line_number, name) pairs. Every non-empty line is one
+    entry; sequence patterns expand into several entries sharing a line number.
     """
-    names = []
-    lines = raw_input.strip().splitlines()
-    for line in lines:
-        for part in line.split(","):
-            cleaned = part.strip().strip('"').strip("'")
-            if cleaned:
-                # Normalize slashes
-                cleaned = cleaned.replace("\\", "/")
-                # Strip leading/trailing slashes
-                cleaned = cleaned.strip("/")
-                if cleaned:
-                    expanded = expand_sequence(cleaned)
-                    names.extend(expanded)
-    
-    # Preserve order while removing duplicates
+    entries: List[Tuple[int, str]] = []
+    budget = [MAX_EXPANSION]
+    for line_no, line in enumerate(raw_input.splitlines(), start=1):
+        text = _strip_wrapping_quotes(line.strip())
+        if not text:
+            continue
+        if nested:
+            text = text.replace("\\", "/").strip("/")
+            if not text:
+                continue
+        for name in expand_sequence(text, budget):
+            entries.append((line_no, name))
+    return entries
+
+
+def parse_folder_names(raw_input: str, nested: bool = True) -> List[str]:
+    """Names only, de-duplicated (case-insensitively) with order preserved."""
     seen = set()
-    deduped = []
-    for n in names:
-        low = n.lower()
-        if low not in seen:
-            seen.add(low)
-            deduped.append(n)
-    return deduped
+    names = []
+    for _, name in parse_lines(raw_input, nested):
+        key = name.lower()
+        if key not in seen:
+            seen.add(key)
+            names.append(name)
+    return names
 
 
-def validate_subfolder_name(rel_path: str) -> Tuple[bool, str]:
+def preview_creation(base_dir: Path, raw_input: str, nested: bool = True, apply_fixes: bool = False) -> Dict[str, Any]:
     """
-    Validates a relative path for invalid characters or reserved Windows names.
+    Analyse every line and report what would happen.
+
+    Each item carries: line, original, suggestion, issues, status, target
+    (the relative path that will really be created, or None if skipped).
     """
-    parts = Path(rel_path).parts
-    if not parts:
-        return False, "Empty path"
+    try:
+        entries = parse_lines(raw_input, nested)
+    except SequenceTooLarge as exc:
+        return {"items": [], "total": 0, "new": 0, "existing": 0, "fixable": 0,
+                "invalid": 0, "duplicate": 0, "error": str(exc)}
 
-    for part in parts:
-        if part in {".", ".."}:
-            return False, f"Path component '{part}' is not allowed"
-        if any(ch in INVALID_NAME_CHARS for ch in part):
-            return False, f"'{part}' contains invalid Windows characters (< > : \" | ? *)"
-        stem = part.split(".")[0].upper()
-        if stem in RESERVED_NAMES:
-            return False, f"'{part}' uses reserved Windows device name ({stem})"
-    return True, "Valid"
+    base_len = len(str(base_dir))
+    items: List[Dict[str, Any]] = []
+    seen: Dict[str, int] = {}
 
+    for line_no, original in entries:
+        issues, suggestion = analyze_name(original, nested=nested, base_len=base_len)
+        normalised = original if nested is False else original.strip("/")
+        has_issues = bool(issues)
 
-def preview_creation(base_dir: Path, raw_input: str) -> Dict[str, List[Dict]]:
-    names = parse_folder_names(raw_input)
-    items = []
-    for rel in names:
-        is_valid, reason = validate_subfolder_name(rel)
-        if not is_valid:
-            status = "invalid"
-            desc = reason
+        if has_issues and not suggestion:
+            status, target = INVALID, None
+        elif has_issues and not apply_fixes:
+            status, target = FIXABLE, None
         else:
-            target = base_dir / rel
-            if target.exists():
-                status = "existing"
-                desc = "Already exists (will skip)"
+            target = suggestion if has_issues else normalised
+            status = NEW
+
+        if target:
+            key = target.lower()
+            if key in seen:
+                status, target = DUPLICATE, None
+                issues = issues + [f"Same as line {seen[key]}"]
             else:
-                status = "new"
-                desc = "Ready to create"
+                seen[key] = line_no
+                if (base_dir / target).exists():
+                    status = EXISTING
+
         items.append({
-            "path": rel,
+            "line": line_no,
+            "original": original,
+            "suggestion": suggestion if has_issues else "",
+            "issues": issues,
             "status": status,
-            "description": desc
+            "target": target,
+            "fixed": has_issues and apply_fixes and bool(target),
         })
-    return {
-        "items": items,
-        "total": len(items),
-        "new": sum(1 for i in items if i["status"] == "new"),
-        "existing": sum(1 for i in items if i["status"] == "existing"),
-        "invalid": sum(1 for i in items if i["status"] == "invalid")
-    }
+
+    counts = {s: sum(1 for i in items if i["status"] == s) for s in (NEW, EXISTING, FIXABLE, INVALID, DUPLICATE)}
+    return {"items": items, "total": len(items), "error": "", **counts}
 
 
-def execute_create_folders(base_dir: Path, raw_input: str) -> Dict[str, any]:
-    preview = preview_creation(base_dir, raw_input)
-    created = []
-    skipped = []
-    failed = []
+def apply_suggestions(raw_input: str, nested: bool = True, base_dir: Path = None) -> Tuple[str, int]:
+    """
+    Rewrite the raw text so every fixable line uses its suggested name.
+    Sequence lines are left alone (their expansions are fixed at creation time).
+    Returns (new_text, number_of_lines_changed).
+    """
+    base_len = len(str(base_dir)) if base_dir else 0
+    out_lines = []
+    changed = 0
+    for line in raw_input.splitlines():
+        text = _strip_wrapping_quotes(line.strip())
+        if not text or re.search(r"\{(?:\d+|[A-Za-z])\.\.(?:\d+|[A-Za-z])\}", text):
+            out_lines.append(line)
+            continue
+        probe = text.replace("\\", "/").strip("/") if nested else text
+        issues, suggestion = analyze_name(probe, nested=nested, base_len=base_len)
+        if issues and suggestion and suggestion != text:
+            out_lines.append(suggestion)
+            changed += 1
+        else:
+            out_lines.append(line)
+    return "\n".join(out_lines), changed
+
+
+def execute_create_folders(base_dir: Path, raw_input: str, nested: bool = True, apply_fixes: bool = False) -> Dict[str, Any]:
+    preview = preview_creation(base_dir, raw_input, nested, apply_fixes)
+    created: List[str] = []
+    created_dirs: List[Path] = []   # every directory this run really made (for undo)
+    skipped: List[str] = []
+    failed: List[Tuple[str, str]] = []
 
     for item in preview["items"]:
-        rel = item["path"]
-        if item["status"] == "invalid":
-            failed.append((rel, item["description"]))
+        status = item["status"]
+        if status == EXISTING:
+            skipped.append(item["target"])
             continue
-        if item["status"] == "existing":
-            skipped.append(rel)
+        if status != NEW:
+            reason = "; ".join(item["issues"]) or status
+            failed.append((item["original"], reason))
             continue
+        rel = item["target"]
+        target = base_dir / rel
         try:
-            target = base_dir / rel
+            missing: List[Path] = []
+            probe = target
+            while probe != base_dir and not probe.exists():
+                missing.append(probe)
+                probe = probe.parent
             target.mkdir(parents=True, exist_ok=True)
             created.append(rel)
+            created_dirs.extend(reversed(missing))
         except Exception as exc:
-            failed.append((rel, str(exc)))
+            failed.append((item["original"], str(exc)))
 
     return {
         "created": created,
+        "created_dirs": created_dirs,
         "skipped": skipped,
         "failed": failed,
-        "total": preview["total"]
+        "total": preview["total"],
+        "error": preview.get("error", ""),
     }
+
+
+def undo_created_folders(created_dirs: List[Path]) -> Dict[str, Any]:
+    """Remove folders from a previous run - only if they are still empty."""
+    removed = 0
+    kept: List[str] = []
+    for path in reversed(created_dirs):
+        try:
+            if path.is_dir():
+                os.rmdir(path)  # raises if not empty - never deletes user content
+                removed += 1
+        except OSError:
+            kept.append(str(path))
+    return {"removed": removed, "kept": kept}
