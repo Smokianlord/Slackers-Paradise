@@ -74,7 +74,3 @@ python -m unittest discover -s tests -t .
 - Folder creation can be undone - only still-empty folders are removed.
 - The cleaner refuses drive roots, your user profile and Windows folders, skips recently modified temp files and uses the Recycle Bin for folders and shortcuts.
 - Settings live in `%APPDATA%\SlackersParadise\config.json`.
-
-## License
-
-[MIT](LICENSE)
