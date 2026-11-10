@@ -1,17 +1,8 @@
 # Slackers-Paradise
 
-<p align="center"><strong>Folder &amp; file automation for Windows.</strong><br/>Build folders in bulk, catalog directories, batch-rename safely, launch shortcuts, clean junk.</p>
+A Windows app with five small file and folder tools: make many folders at once, list a folder's contents, batch-rename files, open many shortcuts at once, and clean up junk.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/release-v4.0.0-6d4aff.svg?style=for-the-badge" alt="Release" />
-  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4.svg?style=for-the-badge&logo=windows" alt="Windows" />
-  <img src="https://img.shields.io/badge/python-3.10%2B-3776ab.svg?style=for-the-badge&logo=python" alt="Python" />
-  <img src="https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge" alt="License" />
-</p>
-
-<p align="center"><img width="900" alt="Slackers-Paradise" src="assets/preview.png" /></p>
-
----
+<img width="900" alt="Slackers-Paradise" src="assets/preview.png" />
 
 ## Tools
 
